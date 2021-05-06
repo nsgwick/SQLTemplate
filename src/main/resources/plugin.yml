@@ -1,0 +1,5 @@
+name: ProfileTemplate
+version: ${project.version}
+main: xyz.cosmicity.profiletemplate.ProfileTemplate
+api-version: 1.16
+authors: [ DistantNeb, CosmicSilence, Nick ]
