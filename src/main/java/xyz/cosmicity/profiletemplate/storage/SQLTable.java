@@ -11,10 +11,11 @@ import java.util.List;
 
 public class SQLTable {
 
-    private final String name, cols, colsJoined;
+    private final String name, colsJoined;
     private final String[] pk;
+    private final String[][] cols;
 
-    public SQLTable(final String table, final String pkLbl, final String pkType, final String columns) {
+    public SQLTable(final String table, final String pkLbl, final String pkType, final String[][] columns) {
         name = table;
         pk = new String[]{pkLbl, pkType};
         cols = columns;
@@ -23,35 +24,30 @@ public class SQLTable {
     }
 
     public String joinCols() {
-        String[] split = cols.split(" ");
-        List<String> columns = new ArrayList<>();
-        for(int i = 0; i < split.length; i++) {
-            if( i % 2 == 1) {// i is odd
-                columns.add(split[i - 1] + " " + split[i]);
-            }
+        List<String> res = new ArrayList<>();
+        for(String[] col : cols) {
+            res.add(col[0] + " " + col[1]);
         }
-        return String.join(", ", columns.toArray(String[]::new));
+        return String.join(", ", res);
     }
 
     public void init() {
         SQLUtils.update("CREATE TABLE IF NOT EXISTS "+ name
-                + " (" + String.join(" ",pk) +" PRIMARY KEY, "+ colsJoined + ");");
+                + " (" + String.join(" ",pk) +", "+ colsJoined + ", PRIMARY KEY ("+pk[0]+"));");
     }
 
     public String getName() {
         return name;
     }
 
-    public String getCols() {
+    public String[][] getCols() {
         return cols;
     }
 
     public List<String> getColLabels() {
         List<String> labels = new ArrayList<>();
-        for(int i = 0; i < cols.split(" ").length; i++) {
-            if( i % 2 == 0) {// even is label
-                labels.add(cols.split(" ")[i]);
-            }
+        for(String[] col : cols) {
+            labels.add(col[0]);
         }
         return labels;
     }
@@ -71,7 +67,7 @@ public class SQLTable {
             PreparedStatement pst =
                     con.prepareStatement("SELECT * FROM "+name+" WHERE "+getPkLabel()+"="+key+";");
             ResultSet rs = pst.executeQuery();) {
-            if(cols.split(" ").length == 0) {
+            if(cols.length == 0) {
                 int i = 1;
                 while(rs.next()) {
                     objects.add(rs.getObject(i));
@@ -80,10 +76,8 @@ public class SQLTable {
             }
             else {
                 while (rs.next()) {
-                    for(int i = 0; i < cols.split(" ").length; i++) {
-                        if( i % 2 == 0) {// even is label
-                            objects.add(rs.getObject(cols.split(" ")[i]));
-                        }
+                    for(String[] col : cols) {
+                        objects.add(rs.getObject(col[0]));
                     }
                 }
             }

@@ -1,6 +1,8 @@
 package xyz.cosmicity.profiletemplate.storage;
 
+import co.aikar.idb.DB;
 import co.aikar.idb.Database;
+import org.bukkit.Bukkit;
 import org.jetbrains.annotations.NotNull;
 
 import java.sql.*;
@@ -9,10 +11,11 @@ import java.util.List;
 
 public class SQLUtils {
 
-    static Database db;
+    private static Database db;
 
     public static void setDb(Database dbase) {
         db = dbase;
+        DB.setGlobalDatabase(db);
     }
     public static Database getDb() {
         return db;
@@ -53,27 +56,28 @@ public class SQLUtils {
     /**
      * @param values - the values only. (just values not colLabel=value etc)
      */
-    public static void setRow(final SQLTable table, final String key, final String... values) {
-        List<String> columns = new ArrayList<>(),
-                tableColumns = table.getColLabels(),
+    public static void setRow(final SQLTable table, final String key, final Object... values) {
+        List<String> columnLabels = table.getColLabels(),
         equivalents = new ArrayList<>();
-        for(int i = 0; i < values.length; i ++) {
-            columns.add(tableColumns.get(i));
-            equivalents.add(tableColumns.get(i) + " = " + values[i]);
+        for(String lbl : columnLabels) {
+            equivalents.add(lbl + " = ?");
         }
-        update(
-                "INSERT INTO "+ table.getName() +
-                        " (" + table.getPkLabel() + "," + String.join(",",columns) + ")" +
-                        " VALUES (" + key + "," + String.join(String.join(",", values)) + ")" +
-                        " ON DUPLICATE KEY UPDATE " + String.join(", ",equivalents) + ";");
-
-        // INSERT INTO profiles (uuid, joined, discordid) VALUES ("rehwjalnkj", 3849214798, "") ON DUPLICATE UPDATE joined = 432498234, discordid = ""
+        List<Object> objs = new ArrayList<>();
+        objs.add(key);
+        objs.add(values);
+        objs.add(values);
+        Bukkit.getServer().getLogger().info("INSERT INTO "+table.getName()+" ("+table.getPkLabel()+","+String.join(",",columnLabels) + ") VALUES (?" + ",?".repeat(columnLabels.size())+")" +
+                " ON DUPLICATE KEY UPDATE " + String.join(", ",equivalents));
+        db.createTransaction(stm -> {
+            stm.executeUpdateQuery("INSERT INTO "+table.getName()+" ("+table.getPkLabel()+","+String.join(",",columnLabels) + ") VALUES (?" + ",?".repeat(columnLabels.size())+")" +
+                    " ON DUPLICATE KEY UPDATE " + String.join(", ",equivalents) + ";", objs.toArray(Object[]::new));
+            return true;
+        });
     }
 
     public static void update(final String query) {
-        try (Connection con = db.getConnection();
-             PreparedStatement pst = con.prepareStatement(query);) {
-            pst.executeUpdate();
+        try {
+            db.executeUpdate(query);
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -102,7 +106,9 @@ public class SQLUtils {
                 ResultSet rs = pst.executeQuery()
         ) {
             if(rs != null) {
-                size = rs.getRow();
+                while(rs.next()) {
+                    size = rs.getRow();
+                }
             }
 
         } catch (SQLException throwables) {

@@ -1,21 +1,25 @@
 package xyz.cosmicity.profiletemplate.storage;
 
-import co.aikar.idb.DatabaseOptions;
-import co.aikar.idb.HikariPooledDatabase;
-import co.aikar.idb.PooledDatabaseOptions;
+import co.aikar.idb.*;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.cache.RemovalNotification;
+import org.bukkit.Bukkit;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 
 public class SQLService {
 
     private final SQLTable profileTable;
+
+    private final Database db;
 
     @NonNull
     private final LoadingCache<@NotNull UUID, @NotNull Profile> profileCache;
@@ -28,9 +32,11 @@ public class SQLService {
                         database,
                         host).build();
 
-        SQLUtils.setDb(new HikariPooledDatabase(PooledDatabaseOptions.builder().options(options).build()));
+        this.db = PooledDatabaseOptions.builder().options(options).createHikariDatabase();
 
-        profileTable = new SQLTable("profiles", "uuid","VARCHAR(16)","joined TEXT discordid VARCHAR(32)");
+        SQLUtils.setDb(this.db);
+
+        profileTable = new SQLTable("profiles", "uuid","VARCHAR(36)",new String[][]{{"joined","TEXT"},{"discordid","VARCHAR(32)"}});
 
         profileCache = CacheBuilder.newBuilder()
                 .removalListener(this::saveProfile)
@@ -50,7 +56,7 @@ public class SQLService {
     }
 
     private void saveProfile(@NotNull final RemovalNotification<@NotNull UUID, @NotNull Profile> notification) {
-        notification.getValue().saveTo(profileTable);
+        setRow( profileTable, notification.getValue().getUuid().toString(), Long.toString(notification.getValue().getFirstJoined().getTime()), notification.getValue().getDiscord());
     }
 
     /*
@@ -75,6 +81,32 @@ public class SQLService {
 
     public Profile wrapIfLoaded(@NotNull final UUID uuid) {
         return profileCache.getIfPresent(uuid);
+    }
+
+
+    /**
+     * @param values - the values only. (just values not colLabel=value etc)
+     */
+    public void setRow(final SQLTable table, final String key, final Object... values) {
+        List<String> columnLabels = table.getColLabels(),
+                equivalents = new ArrayList<>();
+        for(String lbl : columnLabels) {
+            equivalents.add(lbl + " = ?");
+        }
+        List<Object> objs = new ArrayList<>();
+        objs.add(key);
+        objs.addAll(Arrays.asList(values));
+        objs.addAll(Arrays.asList(values));
+        Bukkit.getServer().getLogger().info("INSERT INTO "+table.getName()+" ("+table.getPkLabel()+","+String.join(",",columnLabels) + ") VALUES (?" + ",?".repeat(columnLabels.size())+")" +
+                " ON DUPLICATE KEY UPDATE " + String.join(", ",equivalents));
+        for(Object o : objs) {
+            Bukkit.getServer().getLogger().info(o.toString());
+        }
+        SQLUtils.getDb().createTransaction(stm -> {
+            stm.executeUpdateQuery("INSERT INTO "+table.getName()+" ("+table.getPkLabel()+","+String.join(",",columnLabels) + ") VALUES (?" + ",?".repeat(columnLabels.size())+")" +
+                    " ON DUPLICATE KEY UPDATE " + String.join(", ",equivalents) + ";", objs.toArray(Object[]::new));
+            return true;
+        });
     }
 
 }

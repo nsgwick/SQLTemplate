@@ -31,13 +31,12 @@ public class Profile {
     }
 
     public Profile loadAttributes(final SQLTable table) {
-        List<Object> row = SQLUtils.getRow(table, key.toString(),"joined","discordid");
+        List<Object> row = SQLUtils.getRow(table, "\""+key.toString()+"\"","joined","discordid");
         firstJoined = Date.from(Instant.ofEpochMilli(Long.parseLong((String) row.get(0))));
         return this;
     }
 
     public void saveTo(final SQLTable table) {
-        SQLUtils.setRow( table, "\"" + key +"\"", "\""+firstJoined.getTime()+"\"", "\""+ discord +"\"");
     }
 
 }
